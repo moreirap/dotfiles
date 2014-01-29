@@ -1,0 +1,22 @@
+# Default to ignore all files
+**/*
+
+# Add gitignore file
+!.gitignore
+
+# Add emacs config file
+!.emacs
+
+# Add tmux config file
+!.tmux.conf
+
+# Add ghci config file
+!.ghci
+
+# Add Readme file
+!README.md
+
+# Add Readme file
+!LICENSE
+
+
