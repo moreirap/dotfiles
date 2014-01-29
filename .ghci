@@ -1,0 +1,312 @@
+-- ###
+-- #  Read GHCI commands from the file whose name is in the GHCIRC environment variable (if set)
+-- ###
+:def _load const(System.Environment.getEnvironment>>=maybe(return"")readFile.lookup"GHCIRC")
+:_load
+:undef _load
+
+-- ###
+-- #  A fancy prompt
+-- ###
+:set prompt "λ> "
+
+-- ###
+-- #  clear command
+-- ###
+
+:def clear \_ -> return ":! clear"
+
+-- Latest extract of 
+-- from
+-- http://web.archive.org/web/20130707154702/http://www.cs.kent.ac.uk/people/staff/cr3/toolbox/haskell/dot-squashed.ghci
+
+-- if your editor doesn't understand :e +line file (jump to line in file), you'll need to change
+-- functions find and loadEditErr below
+:set editor emacsclient -t -a ""
+
+-- make commands helpful
+:{
+let 
+    cmdHelp cmd msg "--help" = return $ "putStrLn " ++ show msg
+    cmdHelp cmd msg other    = if "--dryrun" `Data.List.isSuffixOf` (strip other) then 
+                                   (cmd $ stripflag other) >>= (\cmdtxt -> return $ "putStrLn " ++ show cmdtxt) 
+                               else 
+                                   cmd other
+                                   where
+                                       strip     = lstrip . rstrip
+                                       lstrip    = dropWhile (`elem` " \t")
+                                       rstrip    = reverse . lstrip . reverse
+                                       stripflag = (unwords . init . words) 
+:}
+
+
+-- ###
+-- #  . command
+-- ###
+let dot file = return "readFile dot"
+
+:def . cmdHelp dot ":. <file>\t\t-- source commands from <file>"
+
+
+-- ###
+-- #  pwd command
+-- ###
+
+let pwd _ = return "System.Directory.getCurrentDirectory >>= putStrLn"
+
+:def pwd cmdHelp pwd ":pwd\t\t\t-- print working directory"
+
+
+-- ###
+-- #  ls command
+-- ###
+
+let ls p  = return $ "mapM_ putStrLn =<< System.Directory.getDirectoryContents " ++ show path where {path = if (null p) then "." else p}
+
+:def ls cmdHelp ls ":ls [<path>]\t\t-- list directory (\".\" by default)"
+
+
+-- ###
+-- #  redir command
+-- ###
+
+:{
+let redir varcmd = 
+       case break Data.Char.isSpace varcmd of 
+       { (var,_:cmd) -> return $ unlines 
+          [":set -fno-print-bind-result" 
+          ,"tmp <- System.Directory.getTemporaryDirectory"
+          ,"(f,h) <- System.IO.openTempFile tmp \"ghci\""
+          ,"sto <- GHC.Handle.hDuplicate System.IO.stdout"
+          ,"GHC.Handle.hDuplicateTo h System.IO.stdout"
+          ,"System.IO.hClose h"
+          ,cmd
+          ,"GHC.Handle.hDuplicateTo sto System.IO.stdout"
+          ,"let readFileNow f = readFile f >>= \\t->length t `seq` return t"
+          ,var++" <- readFileNow f"
+          ,"System.Directory.removeFile f"]
+        ; _ -> return "putStrLn \"usage: :redir <var> <cmd>\"" }
+
+:}
+
+:def redir cmdHelp redir ":redir <var> <cmd>\t-- execute <cmd>, redirecting stdout to <var>"
+
+
+-- ###
+-- #  redirErr command
+-- ###
+
+:{
+let redirErr varcmd = 
+        case break Data.Char.isSpace varcmd of 
+          { (var,_:cmd) -> return $ unlines 
+            [":set -fno-print-bind-result" 
+            ,"tmp <- System.Directory.getTemporaryDirectory" 
+            ,"(f,h) <- System.IO.openTempFile tmp \"ghci\"" 
+            ,"ste <- GHC.Handle.hDuplicate System.IO.stderr" 
+            ,"GHC.Handle.hDuplicateTo h System.IO.stderr" 
+            ,"System.IO.hClose h" 
+            ,"let readFileNow f = readFile f >>= \\t->length t `seq` return t" 
+            ,"let afterCmd _ = do { GHC.Handle.hDuplicateTo ste System.IO.stderr \
+             \; r <- readFileNow f \
+             \; System.Directory.removeFile f \
+             \; return $ \""++var++" <- return \"++show r }" 
+            ,":def afterCmd afterCmd"
+            , cmd
+            , ":afterCmd", ":undef afterCmd" ] 
+          ; _ -> return "putStrLn \"usage: :redirErr <var> <cmd>\"" }
+:}
+
+:def redirErr cmdHelp redirErr ":redirErr <var> <cmd>\t-- execute <cmd>, redirecting stderr to <var>"
+
+
+-- ###
+-- #  grep command
+-- ###
+:{
+
+let { 
+  merge []                    = [] 
+; merge (l:c:ls) | i c > i l  = merge ((l++c):ls) 
+                                where {i l = length (takeWhile Data.Char.isSpace l)} 
+; merge (l:ls)                = l:merge ls  
+; grep patcmd = case break Data.Char.isSpace patcmd of 
+                  { (pat,_:cmd) -> return $ unlines 
+                                   [":redir out "++cmd 
+                                   ,"let ls = "++if ":browse" `Data.List.isPrefixOf` cmd then "merge (lines out)" else "lines out" 
+                                   ,"let match pat = Data.Maybe.isJust . Text.Regex.matchRegex (Text.Regex.mkRegex pat)" 
+                                   ,"putStrLn $ unlines $ (\"\":) $ filter (match "++show pat++") $ ls"] 
+                  ; _ -> return "putStrLn \"usage: :grep <pat> <cmd>\"" } }
+
+:}
+
+:def grep cmdHelp grep ":grep <pat> <cmd>\t-- filter lines matching <pat> from the output of <cmd>"
+
+
+-- ###
+-- #  find command
+-- ###
+
+:{
+
+let find id = return $ unlines 
+              [":redir out :info "++id 
+              ,"let ls = filter (Data.List.isInfixOf \"-- Defined\") $ lines out" 
+              ,"let match pat = Text.Regex.matchRegex (Text.Regex.mkRegex pat)" 
+              ,"let m = match \"-- Defined at ([^<:]*):([^:]*):\" $ head ls" 
+              ,":cmd return $ case (ls,m) of { (_:_,Just [mod,line]) -> (\":e +\"++line++\" \"++mod) ; _ -> \"\" }"]
+:}
+
+:def find cmdHelp find ":find <id>\t\t-- call editor (:set editor) on definition of <id>"
+
+
+-- ###
+-- #  browse command
+-- ###
+
+:{
+
+let { 
+  b browse "" = return $ unlines 
+                [":redir out :show modules" 
+                ,":cmd case lines out of { (l:_) -> return ("++show browse++"++head (words l)); _ -> return \"\" }"] 
+; b browse m  = return (browse++m) }
+
+:}
+
+:def b  cmdHelp (b ":browse! ") ":b [<mod>]\t\t-- :browse <mod> (default: first loaded module)"
+
+
+-- ###
+-- #  le command
+-- ###
+:{
+
+let loadEditErr m = return $ unlines 
+                    [if null m then ":redirErr err :r" else ":redirErr err :l "++m 
+                    ,"let match pat = Text.Regex.matchRegex (Text.Regex.mkRegex pat)" 
+                    ,"let ms = Data.Maybe.catMaybes $ map (match \"^([^:]*):([^:]*):([^:]*):\") $ lines err" 
+                    ,":cmd return $ case ms of { ([mod,line,col]:_) -> (\":e +\"++line++\" \"++mod) ; _ -> \"\" }"]
+:}
+
+:def le cmdHelp loadEditErr ":le [<mod>]\t\t-- try to :load <mod> (default to :reload); edit first error, if any"
+
+
+-- ###
+-- #  search command
+-- ###
+
+let ghciEscapeShellArg arg = "'" ++ concatMap (\c -> if c == '\'' then "'\"'\"'" else [c]) arg ++ "' | less -R"
+let search mod = return  $ ":! hoogle --color " ++ (ghciEscapeShellArg mod)
+
+:def search cmdHelp search ":search <mod>\t\t-- search hoogle for <mod> returning only definitions"
+
+
+-- ###
+-- #  doc command
+-- ###
+let doc mod = return $ ":! hoogle --info " ++ ghciEscapeShellArg mod
+
+:def doc cmdHelp doc ":doc <mod>\t\t-- search hoogle for <mod> returning additional info (runs a hoogle --info query)"
+
+
+-- ###
+-- #  hlint command
+-- ###
+:{
+
+let hlint extra = return $ unlines
+        [":unset +t +s"
+        ,":set -w"
+        ,":redir hlintvar1 :show modules"
+        ,":cmd return $ \
+         \ \":! hlint \" ++ unwords (map (takeWhile (/=',') . drop 2 . dropWhile (/= '(')) $ lines hlintvar1) ++ \" \" ++ " ++ show extra
+        ,":set +t +s -Wall"
+        ]
+:}
+
+:def hlint cmdHelp hlint ":hlint <params>\t\t-- runs hlint (Haskell code style tool) with <params>" 
+
+
+-- ###
+-- #  ghc_pkg command
+-- ###
+let ghc_pkg l = return $ ":!" ++ GHC.Paths.ghc_pkg ++ " " ++ l
+
+:def ghc_pkg cmdHelp ghc_pkg ":ghc_pkg <params>\t-- runs ghc-pkg with <params>"
+
+
+-- ###
+-- #  browser command
+-- ### 
+let browser url = return $ ":!/usr/bin/firefox " ++ url ++ " 2> /dev/null"
+
+:def browser cmdHelp browser ":browser <url>\t\t-- opens firefox optionally navigating to <url>"
+
+
+-- ###
+-- #  browsedoc command
+-- ###
+:{
+ 
+let browsedoc p = return $ ":browser " ++ GHC.Paths.docdir ++ "/" ++ relative ++ ".html"
+        where relative | p ==""    = "../../index" 
+                       | otherwise =  init $ concatMap (++"-") $ (fix p) 
+              fix s                =  case dropWhile (=='.') s of
+                                        "" -> []
+                                        s' -> w : fix s''
+                                            where (w, s'') = break (=='.') s'
+:}
+
+:def browsedoc cmdHelp browsedoc ":browsedoc <mod>\t-- opens firefox navigating to <mod> page or index.html if <mod> not set"
+
+
+-- ###
+-- #  pastecode command
+-- ###
+
+let loop = do { l <- getLine; if l == "\^D" then return () else do appendFile "foo.hs" (l++"\n"); loop }
+:def pasteCode (\_ -> loop >> return ":load foo.hs")
+
+
+-- :def pasteCode chdHelp pasteline ":pastecode <code>\^D\t\t-- loads and runs haskell code" 
+
+
+
+
+
+
+
+
+-- ################################################################################################################
+-- This is the last command. cmds, should list all commands defined in this file.
+--
+-- ###
+-- #  defs command
+-- ###
+:{
+
+let { 
+  cmds = ["."
+         ,"pwd"
+         ,"ls"
+         ,"redir"
+         ,"redirErr"
+         ,"grep"
+         ,"find"
+         ,"b"
+         ,"le"
+         ,"search"
+         ,"doc"
+         ,"hlint"
+         ,"browser"
+         ,"browsedoc"
+         ,"ghc_pkg"
+         ,"defs"] 
+; defs "list"  = return $ unlines $ "putStrLn \"\"": [":" ++ cmd ++ " --help" | cmd <- cmds] ++ ["putStrLn \"\""] 
+; defs "undef" = return $ unlines [":undef "++ cmd | cmd <- cmds] 
+; defs _       = return "putStrLn \"usage: :defs {list,undef}\"" }
+
+:}
+
+:def defs cmdHelp defs ":defs {list,undef}\t-- list or undefine user-defined commands"
