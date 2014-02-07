@@ -1,4 +1,5 @@
 ;; Start emacs as a server (unless already running)
+(load "server")
 (unless (server-running-p) (server-start))
 
 (require 'package)
