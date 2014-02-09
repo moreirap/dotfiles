@@ -1,6 +1,15 @@
 # Default to ignore all files
 /*
 
+# My shell configuration
+# Mostly taken from https://github.com/necolas/dotfiles
+!.bashrc
+!.inputrc
+!.dotfiles/
+.dotfiles/*
+!.dotfiles/shell/
+
+
 # Add gitignore file
 !.gitignore
 
