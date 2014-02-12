@@ -41,6 +41,8 @@
 !.emacs.d/elpa/cl-lib-0.4
 !.emacs.d/elpa/haskell-mode-20140205.548
 !.emacs.d/elpa/xclip-1.3
+!.emacs.d/elpa/ghc-1.10.2
+
 
 # Ignore everything in "themes", except the themes specified
 .emacs.d/themes/*
