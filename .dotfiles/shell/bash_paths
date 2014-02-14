@@ -1,0 +1,4 @@
+#!/bin/bash
+
+# Add cabal binaries to Path
+export PATH=/home/pedro/.cabal/bin:$PATH
