@@ -25,3 +25,7 @@ export MANPAGER="less -X"
 # Make new shells get the history lines from all previous
 # shells instead of the default "last window closed" history
 export PROMPT_COMMAND="history -a; $PROMPT_COMMAND"
+
+
+## Add cabal package binaries to path
+export PATH="/home/pedro/.cabal/bin:$PATH"
