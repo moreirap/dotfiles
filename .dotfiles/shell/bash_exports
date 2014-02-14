@@ -26,6 +26,8 @@ export MANPAGER="less -X"
 # shells instead of the default "last window closed" history
 export PROMPT_COMMAND="history -a; $PROMPT_COMMAND"
 
-
 ## Add cabal package binaries to path
 export PATH="/home/pedro/.cabal/bin:$PATH"
+
+# Default term to 256 colors
+export TERM=xterm-256color
