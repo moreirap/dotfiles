@@ -1,0 +1,27 @@
+[user]
+	name = moreirap
+	email = pedro.miguel.moreira@gmail.com
+[credential]
+	helper = cache --timeout=86400
+[push]
+	default = current
+[branch]
+	autosetuprebase = always
+[color]
+	ui = true
+	branch = true
+	diff = true
+	decorate = true
+	grep = true
+	interactive = true
+	pager = true
+	status = true
+	showbranch = true
+
+[merge]
+        tool = smartsynchronize
+[mergetool "smartsynchronize"]
+        cmd = '/home/pedro/bin/smartsynch' "$LOCAL" "$REMOTE" "$MERGED"
+        trustExitCode = false
+[diff]
+	prompt = false

@@ -13,6 +13,9 @@
 # Add gitignore file
 !.gitignore
 
+# Add .gitconfig file
+!.gitconfig
+
 # Add emacs config file
 !.emacs
 
